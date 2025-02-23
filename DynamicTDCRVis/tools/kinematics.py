@@ -136,7 +136,20 @@ def inverse_kinematics(target_pose, initial_guess, pts_per_seg, kappa_limits = [
         # print(pos_error + 0.75 * ori_error)
         # print("ORI",ori_error)
         # print(pos_error)
-        return pos_error + 4 * ori_error
+        # 
+        # # Calc spring penalty 
+        phi_rest = np.zeros(num_segments)
+        k_spring = np.array([10, 1])
+        spring_penalty = np.sum(k_spring * ((phi - phi_rest)**2))
+
+        # print(pos_error + 0.75 * ori_error)
+        print("ORI",ori_error)
+        print("pos error: ", pos_error)
+        print("spring penalty: ", spring_penalty)
+        
+        #return pos_error + 4 * ori_error
+        return pos_error + 4 * ori_error + spring_penalty * 0.000001 #mult spring penalty to get it down to E-5 (OOM of position error once near/at optimal IK params)
+
 
     # Construct bounds for each parameter
     num_segments = len(initial_guess) // 3
