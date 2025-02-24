@@ -138,9 +138,9 @@ def inverse_kinematics(target_pose, initial_guess, pts_per_seg, kappa_limits = [
         # print(pos_error)
         # 
         # # Calc spring penalty 
-        phi_rest = np.zeros(num_segments)
+        kappa_rest = np.zeros(num_segments)
         k_spring = np.array([10, 1])
-        spring_penalty = np.sum(k_spring * ((phi - phi_rest)**2))
+        spring_penalty = np.sum(k_spring * ((kappa - kappa_rest)**2))
 
         # print(pos_error + 0.75 * ori_error)
         print("ORI",ori_error)
