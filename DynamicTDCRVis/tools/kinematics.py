@@ -101,7 +101,7 @@ def robotindependentmapping(kappa: np.ndarray[float], phi: np.ndarray[float], el
 
 from scipy.optimize import minimize
 
-def inverse_kinematics(target_pose, initial_guess, pts_per_seg, kappa_limits = [[0,10], [0,20]], phi_limits = [[-4,4],[-4,4]], ell_limits = [[0.25, 0.392],[0.20,0.392]]):
+def inverse_kinematics(target_pose, initial_guess, pts_per_seg, kappa_limits = [[-10,10], [-10,10]], phi_limits = [[-4,4],[-4,4]], ell_limits = [[0.25, 1.0],[0.20,1.0]]):
     """
     Solves inverse kinematics (IK) for a continuum robot with joint limits.
     
@@ -148,7 +148,7 @@ def inverse_kinematics(target_pose, initial_guess, pts_per_seg, kappa_limits = [
         print("spring penalty: ", spring_penalty)
         
         #return pos_error + 4 * ori_error
-        return pos_error + 4 * ori_error + spring_penalty * 0.000001 #mult spring penalty to get it down to E-5 (OOM of position error once near/at optimal IK params)
+        return pos_error + 4 * ori_error + spring_penalty * 0.0001 #mult spring penalty to get it down to E-5 (OOM of position error once near/at optimal IK params)
 
 
     # Construct bounds for each parameter

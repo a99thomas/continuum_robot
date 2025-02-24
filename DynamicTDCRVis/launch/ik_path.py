@@ -15,6 +15,11 @@ from tools.plotting import setupfigure, plot_tf, update_plot, draw_tdcr
 current_path = Path(__file__).resolve().parent.parent
 print(f"Current script path: {current_path}")
 
+# Global trajectory parameters
+x_path_freq = np.pi / 40  
+y_path_freq = np.pi / 40  
+z_path_freq = np.pi / 4
+
 def clear_plot(plot_elements):
     """
     Clears all the plotted elements from the figure without resetting the axis limits.
@@ -26,6 +31,16 @@ def clear_plot(plot_elements):
                 e.remove()
         else:
             element.remove()
+
+# Global trajectory functions
+def x_path_func(t):
+    return 0.25 * np.sin(t * x_path_freq)
+
+def y_path_func(t):
+    return 0.28 * np.cos(t * y_path_freq)
+
+def z_path_func(t):
+    return 0.6 + 0.1 * np.cos(t * z_path_freq)
 
 def animate():
     # Define initial robot parameters
@@ -39,9 +54,9 @@ def animate():
     t_values = np.linspace(0, 100, 500)
 
     # Calculate the trajectory for each time value
-    x_values = 0.25 * np.sin(t_values * np.pi / 40)
-    y_values = 0.28 * np.cos(t_values * np.pi / 40)
-    z_values = 0.6 + 0.1 * np.cos(t_values * np.pi / 4)
+    x_values = x_path_func(t_values)
+    y_values = y_path_func(t_values)
+    z_values = z_path_func(t_values)
 
     ax.plot(x_values, y_values, z_values, label="Trajectory")
     
@@ -66,8 +81,10 @@ def animate():
         
         # Target pose (update based on the frame)
         target_pose = np.eye(4)
-        target_pose[:3, 3] = [0.25*np.sin(frame*np.pi/40), 0.28* np.cos(frame*np.pi/40), 0.6+0.1*np.cos(frame*np.pi/4)]  # Target position
-        target_pose[:3, :3] = R.from_euler('xyz', [0, 0, 0], degrees=True).as_matrix()  # Target orientation
+        target_pose[:3, 3] = [x_path_func(frame),
+                              y_path_func(frame),
+                              z_path_func(frame)]
+        target_pose[:3, :3] = R.from_euler('xyz', [0, 0, 0], degrees=True).as_matrix()
         
         target_position = target_pose[:3, 3]
         
