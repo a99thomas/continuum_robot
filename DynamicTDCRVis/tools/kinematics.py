@@ -99,8 +99,6 @@ def robotindependentmapping(kappa: np.ndarray[float], phi: np.ndarray[float], el
     return g
 
 
-from scipy.optimize import minimize
-
 def inverse_kinematics(target_pose, initial_guess, pts_per_seg, kappa_limits = [[0,10], [0,20]], phi_limits = [[-4,4],[-4,4]], ell_limits = [[0.25, 0.392],[0.20,0.392]]):
     """
     Solves inverse kinematics (IK) for a continuum robot with joint limits.
@@ -133,22 +131,22 @@ def inverse_kinematics(target_pose, initial_guess, pts_per_seg, kappa_limits = [
         R_actual = R.from_matrix(T_actual[:3, :3])
         R_target = R.from_matrix(target_pose[:3, :3])
         ori_error = 1 - np.dot(R_actual.as_quat(), R_target.as_quat()) ** 2
-        # print(pos_error + 0.75 * ori_error)
-        # print("ORI",ori_error)
-        # print(pos_error)
-        # 
-        # # Calc spring penalty 
-        phi_rest = np.zeros(num_segments)
-        k_spring = np.array([10, 1])
-        spring_penalty = np.sum(k_spring * ((phi - phi_rest)**2))
 
-        # print(pos_error + 0.75 * ori_error)
-        print("ORI",ori_error)
-        print("pos error: ", pos_error)
-        print("spring penalty: ", spring_penalty)
+         
+        # # Calc spring penalty 
+        # phi_rest = np.zeros(num_segments)
+        # k_spring = np.array([10, 7])
+        # spring_penalty = np.sum(k_spring * ((phi - phi_rest)**2))
+
+        # # print(pos_error + 0.75 * ori_error)
+        # print("ORI",ori_error)
+        # print("pos error: ", pos_error)
+        # print("spring penalty: ", spring_penalty)
         
-        #return pos_error + 4 * ori_error
-        return pos_error + 4 * ori_error + spring_penalty * 0.000001 #mult spring penalty to get it down to E-5 (OOM of position error once near/at optimal IK params)
+        return pos_error + 4 * ori_error
+        # return pos_error + 4 * ori_error + spring_penalty * 0.000001 #mult spring penalty to get it down to E-5 (OOM of position error once near/at optimal IK params)
+            # Why factor 0.000001?
+            #Shouldn't this be implemented in kinematics as well?
 
 
     # Construct bounds for each parameter

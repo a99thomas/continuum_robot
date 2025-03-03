@@ -141,7 +141,7 @@ def nullspace(A: np.ndarray[float], atol: float=1e-13, rtol: float=0):
 
 
 
-def draw_tdcr(ax, g: np.ndarray[float], seg_end: np.ndarray[int], r_disk: float=2.5*1e-3, r_height: float=1.5*1e-3, 
+def draw_tdcr(ax, g: np.ndarray[float], seg_end: np.ndarray[int], r_disk: float=0.0127, r_height: float=1.5*1e-3, 
               tipframe: bool=True, segframe: bool=False, baseframe: bool=False, projections: bool=False, 
               baseplate: bool=True):
     '''
