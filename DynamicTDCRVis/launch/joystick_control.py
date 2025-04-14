@@ -4,6 +4,10 @@ import sys
 import time
 from pathlib import Path
 from scipy.spatial.transform import Rotation as R
+import serial
+# Replace with the port you want: 
+# ser = serial.Serial('/dev/ttyUSB0', 115200)  # Adjust the port and baud rate as needed
+time.sleep(2)  # Give it time to connect
 
 # Add the parent directory to the system path
 sys.path.append(str(Path(__file__).resolve().parent.parent))
@@ -97,6 +101,30 @@ def animate():
         
         # Update initial_guess with the optimal_params (this makes it the new initial guess for the next frame)
         initial_guess = optimal_params
+
+        ### Send new lengths to robot ###
+
+        # Convert to tendon lengths
+        lengths = q_to_lengths(kappa, phi, ell)
+
+        # Flatten to a 1D list
+        flat_lengths = [l for segment in lengths for l in segment]
+
+        # If this is the first frame, initialize prev_lengths
+        if 'prev_lengths' not in locals():
+            prev_lengths = flat_lengths
+
+        # Compute change in lengths for each motor
+        delta_lengths = [new - old for new, old in zip(flat_lengths, prev_lengths)]
+
+        # Convert delta length m to degrees & format for serial
+        motor_commands = ", ".join([f"{i} {(delta * 1000 / 25 * 360):.2f}" for i, delta in enumerate(delta_lengths)])
+
+        # Send to robot
+        # ser.write((motor_commands + "\n").encode())
+
+        # Update previous lengths for next frame
+        prev_lengths = flat_lengths
         
         # Recalculate the robot configuration using updated kappa, phi, ell
         g = robotindependentmapping(np.array(kappa), np.array(phi), np.array(ell), np.array([10]))
