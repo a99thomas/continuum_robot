@@ -41,11 +41,11 @@ def y_path_func(t):
     return 0.28 * np.cos(t * y_path_freq)
 
 def z_path_func(t):
-    return 0.6 + 0.1 * np.cos(t * z_path_freq)
+    return 0.7 + 0.1 * np.cos(t * z_path_freq)
 
 def animate():
     # Define initial robot parameters
-    radius = [0.0254, 0.0254]
+    radius = [0.0254, 0.0254, 0.254]
     kappa, phi, ell = np.array([1,1]), np.array([0, 0]), np.array([0.392, 0.392])
     g = robotindependentmapping(np.array(kappa), np.array(phi), np.array(ell), np.array([10]))
     g0 = g
@@ -61,10 +61,17 @@ def animate():
 
     ax.plot(x_values, y_values, z_values, label="Trajectory")
     
-    seg_end = np.array([11,22])  # Example segment indices
+    seg_end = np.array([11,22,33])  # Example segment indices
     clearance = 0.03
     curvelength = np.sum(np.linalg.norm(g[1:, 12:15] - g[:-1, 12:15], axis=1))
-    initial_guess = np.array([0.84141899, 0., 0.98696486, -0.01547761,  0.34352859, 0.392     ])
+    # Use approximate values from FK for a better starting point
+    approx_kappa = np.array([0.84141899, 0., 0.,])  # Slightly curved
+    approx_phi = np.array([0.98696486, -0.01547761, -0.01547761,])  # Evenly spaced bending planes
+    approx_ell = np.array([0.34352859, 0.392, 0.392])  # Reasonable segment lengths
+
+    initial_guess = np.concatenate([approx_kappa, approx_phi, approx_ell])
+
+    #initial_guess = np.array([0.84141899, 0., 0., 0.98696486, -0.01547761, -0.01547761, 0.34352859, 0.392, 0.392])
     optimal_params = initial_guess
     
     def frame_update(frame):
@@ -81,16 +88,18 @@ def animate():
         ax.set_zlim(0, curvelength + clearance)
         
         # Target pose (update based on the frame)
+        
         target_pose = np.eye(4)
         target_pose[:3, 3] = [x_path_func(frame),
                               y_path_func(frame),
                               z_path_func(frame)]
         target_pose[:3, :3] = R.from_euler('xyz', [0, 0, 0], degrees=True).as_matrix()
-        
+        print("target pose POS: ", target_pose[:3, 3])
+        print("target pose ORI: ", target_pose[:3, :3])
         target_position = target_pose[:3, 3]
         
         # Perform inverse kinematics to find the optimal parameters
-        optimal_params = inverse_kinematics(target_pose, initial_guess, pts_per_seg=np.array([10, 10]))
+        optimal_params = inverse_kinematics(target_pose, initial_guess, pts_per_seg=np.array([10, 10, 10]))
         # print("Optimal IK Parameters:", optimal_params)
 
         # Extract kappa, phi, ell from optimal_params

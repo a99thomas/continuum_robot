@@ -15,9 +15,13 @@ def setupfigure(g0, clearance=0.03):
     curvelength = np.sum(np.linalg.norm(g0[1:, 12:15] - g0[:-1, 12:15], axis=1))
     max_val_x = np.max(np.abs(g0[:, 12])) + clearance
     max_val_y = np.max(np.abs(g0[:, 13])) + clearance
-    ax.set_xlim(-max_val_x, max_val_x)
-    ax.set_ylim(-max_val_y, max_val_y)
+    ax.set_xlim(0, max_val_x)
+    ax.set_ylim(-1.0, max_val_y)
     ax.set_zlim(0, curvelength + clearance)
+    # Set axis limits explicitly to ±0.5 in all directions
+    # ax.set_xlim([-1, 1])
+    # ax.set_ylim([-1, 1])
+    # ax.set_zlim([0, 2])  # Ensure positive z-axis direction
     ax.set_xlabel('x (m)')
     ax.set_ylabel('y (m)')
     ax.set_zlabel('z (m)')
@@ -31,11 +35,11 @@ def plot_tf(ax, g, seg_end, tipframe, segframe, baseframe, projections, baseplat
     """
     plot_elements = {}
 
-
     ax.set_xlabel('x (m)')
     ax.set_ylabel('y (m)')
     ax.set_zlabel('z (m)')
     ax.set_ylim(ax.get_xlim())
+    # ax.set_ylim(1.0)
     # Projections
     if projections:
         # print("XLIM:", ax.get_xlim)
@@ -183,7 +187,8 @@ def draw_tdcr(ax, g: np.ndarray[float], seg_end: np.ndarray[int], r_disk: float=
     if g.shape[0] < len(seg_end) or max(seg_end) > g.shape[0]:
         raise ValueError("Dimension mismatch")
 
-    numseg = seg_end.size
+    #numseg = seg_end.size
+    numseg = 3
 
     if numseg == 1:
         col = np.array([0.8])

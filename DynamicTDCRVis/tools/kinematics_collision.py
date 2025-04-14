@@ -2,6 +2,12 @@ import numpy as np
 from scipy.optimize import fsolve, minimize
 from scipy.spatial.transform import Rotation as R
 
+from tools.constants import object_pos, object_rad, object_height, path_height
+from tools.constants import kappa_init, phi_init, ell_init
+from tools.constants import pos_error_penalty, ori_error_penalty, z_error_penalty, collision_vio_penalty, path_error_penalty
+
+
+
 def lengths_to_q(type = "threesegtdcr", lengths = np.zeros((3,1)), radius = [0.0254, 0.0254, 0.0254]):
     """
     Convert lengths of each string to kappa, phi, and ell values
@@ -14,17 +20,13 @@ def lengths_to_q(type = "threesegtdcr", lengths = np.zeros((3,1)), radius = [0.0
             l1 = lengths[0, segment]
             l2 = lengths[1, segment]
             l3 = lengths[2, segment]
-            ell.append((l1 + l2 + l3) / 3)
             g = l1**2 + l2**2 + l3**2 - l1*l2 - l2*l3 - l1*l3
-            kappa.append(2 * g**(0.5) / (radius[segment] * (l1+l2+l3)))
 
-            # phi.append(180 / np.pi * np.arctan(3**0.5 / 3 * (l3 + l2 - 2*l1) / (l2-l3 -(0.000000001))))
+            ell.append((l1 + l2 + l3) / 3)
+            kappa.append(2 * g**(0.5) / (radius[segment] * (l1+l2+l3)))
             phi.append(np.arctan2((np.sqrt(3)*(l2+l3-2*l1)+0.00000000001), 3*(l2 - l3)))
-            # kappa.append((l2 + l3 - 2*l1)/((l1+l2+l3) * radius * np.sin(np.pi - phi[-1])))
 
         return np.array(kappa), np.array(phi), np.array(ell)
-    
-
 
 def robotindependentmapping(kappa: np.ndarray[float], phi: np.ndarray[float], ell: np.ndarray[float], pts_per_seg: np.ndarray[int]) -> np.ndarray[float]:
     """
@@ -70,7 +72,10 @@ def robotindependentmapping(kappa: np.ndarray[float], phi: np.ndarray[float], el
     g = np.zeros((np.sum(pts_per_seg+1), 16))  # Stores the transformation matrices of all the points in all the segments as rows
 
     p_count = 0  # Points counter
+    R_base = R.from_euler('y', 90, degrees=True).as_matrix() #rotate around y by -90
     T_base = np.eye(4)  # base starts off as identity
+    T_base[:3, :3] = R_base # apply rotation
+    T_base[:3, 3] = np.array([0, 0, 1])
     for i in range(numseg):
         c_p = np.cos(phi[i])
         s_p = np.sin(phi[i])
@@ -98,10 +103,20 @@ def robotindependentmapping(kappa: np.ndarray[float], phi: np.ndarray[float], el
 
     return g
 
+def collision_penalty(params, kappa, phi, ell, g, object_pos, object_rad):
 
-from scipy.optimize import minimize
+    penalty = 0
 
-def inverse_kinematics(target_pose, initial_guess, pts_per_seg, kappa_limits = [[-20,20], [-20,20], [-20,20]], phi_limits = [[-6,6],[-6,6], [-6,6]], ell_limits = [[0.15, 1.2],[0.15,1.2], [0.15,1.2]]):
+    for point in g[:, 12:15]: #extracted x, y, z positions for entire curve
+        x, y, z = point
+        dist_to_cylinder = np.sqrt((x - object_pos[0])**2 + (y - object_pos[1])**2)
+        if dist_to_cylinder < object_rad:
+            penalty += (object_rad - dist_to_cylinder)**2 #quadratic penalty for extra uh oh
+    
+    return penalty
+
+
+def inverse_kinematics(target_pose, initial_guess, pts_per_seg, previous_params=None, kappa_limits = [[-15,15], [-15,15], [-15,15]], phi_limits = [[-4,4],[-4,4], [-4,4]], ell_limits = [[0.15, 1.2],[0.15,1.2], [0.15,1.2]], z_flag = 0):
     """
     Solves inverse kinematics (IK) for a continuum robot with joint limits.
     
@@ -118,45 +133,56 @@ def inverse_kinematics(target_pose, initial_guess, pts_per_seg, kappa_limits = [
     """
 
     def pose_error(params):
+        # print(f"pose_error function received z_flag: {z_flag}")  # Debugging
         """Objective function to minimize position & orientation error."""
-        #num_segments = len(params) // 3
+
+        # extract robot params
         num_segments = 3
         kappa = np.array(params[0:num_segments])
-        # phi = np.array(params[num_segments:2*num_segments])
         phi = np.array(params[num_segments:2*num_segments])
         ell = np.array(params[2*num_segments:3*num_segments])
 
+        # get curvature
         g = robotindependentmapping(kappa, phi, ell, pts_per_seg)
         T_actual = g[-1, :].reshape(4, 4).T
 
         pos_error = np.linalg.norm(T_actual[:3, 3] - target_pose[:3, 3])
-
-        R_actual = R.from_matrix(T_actual[:3, :3])
-        R_target = R.from_matrix(target_pose[:3, :3])
-        #ori_error = 1 - np.dot(R_actual.as_quat(), R_target.as_quat()) ** 2
         ori_error = np.linalg.norm(T_actual[:3, :3] - target_pose[:3, :3], 'fro')**2
 
-        ## Calc spring penalty ##      
-        #Ratio penalty
-        baseline_ell = np.array([.392, .392, .392])
+        # Penalize longer paths
+        partial_ell = np.array(ell[:2])
+        #print("partial ell: ", partial_ell)
+        path_length = np.sum(partial_ell)  # Sum of first two segment lengths
+        path_penalty = path_length 
 
-        d1 = ell[0] - baseline_ell[0]
-        d2 = ell[1] - baseline_ell[1]
-        d3 = ell[2] - baseline_ell[2]
+        # Penalize 1st segment curvature
+        first_kappa = kappa[0]
+        second_kappa = kappa[1]
+        #print(f"first kappa: {first_kappa:.4f}, second kappa: {second_kappa:.4f}")
 
-        violation1 = max(0, abs(d2) - 2 * abs(d1))
-        violation2 = max(0, abs(d3) - 3 * abs(d1))
-        vio_penalty_coeff = 1e4
-        ratio_penalty = vio_penalty_coeff * (violation1 **2 + violation2**2)
+        # Z-level penalty
+        z_values = g[:, 14]  # Extract all z coordinates
+        partial_idx = len(z_values) // 2 + 4  # Find the halfway index
+        z_values_second_half = z_values[partial_idx:]  # Slice to get the second half
+        z_penalty = np.sum((z_values_second_half - path_height)**2)  # Penalize large height variations
 
-        # print("ORI",ori_error)
-        # print("POS: ", pos_error)
-        # print("SPR: ", ratio_penalty)
+        # collision penalty
+        collision_vio = collision_penalty(params, kappa, phi, ell, g, object_pos, object_rad)
 
-        # print(f"Desired Rotation Matrix:\n{target_pose[:3, :3]}")
-        # print(f"Actual Rotation Matrix:\n{T_actual[:3, :3]}")
-        
-        return pos_error + 4 * ori_error + ratio_penalty 
+        # print statement on penalties
+        #print(f"POS: {pos_error:.4f}, ORI: {ori_error:.4f}, collision: {collision_vio:.4f}, z flag: {z_flag:.4f}, z: {10 * z_penalty * z_flag:.4f}, length reward: {path_penalty:.4f}")
+
+        # Smoothness penalty: Encourage small incremental changes
+        smoothness_penalty = 0
+        delta = 0.2
+        if previous_params is not None:
+            change = np.abs(params - previous_params)
+            excess_change = np.maximum(0, change - delta)  # Penalize only changes exceeding `delta`
+            smoothness_penalty = np.sum(excess_change**2) * 1e3  # Scale penalty factor
+
+        total_error = pos_error_penalty * pos_error + ori_error_penalty * ori_error + z_error_penalty * z_penalty * z_flag + collision_vio_penalty * collision_vio + path_error_penalty * path_penalty
+
+        return total_error
 
     # Construct bounds for each parameter
     num_segments = len(initial_guess) // 3
@@ -166,15 +192,7 @@ def inverse_kinematics(target_pose, initial_guess, pts_per_seg, kappa_limits = [
         np.vstack(ell_limits).tolist()      # Ell bounds
     )
 
-    # Run optimization with bounds
-    # First, run with a loose tolerance
-    result1 = minimize(pose_error, initial_guess, method='L-BFGS-B', bounds=bounds, tol=1e-3, options={'maxiter': 50})
-    initial_guess = result1.x  # Use this as a refined guess
-
-    # Then, refine with stricter settings
     result = minimize(pose_error, initial_guess, method='L-BFGS-B', bounds=bounds, tol=1e-5, options={'maxiter': 100})
-
-    #result = minimize(pose_error, initial_guess, method='L-BFGS-B', bounds=bounds, tol=1e-5, options={'maxiter': 50})
 
     num_segments = len(result.x) // 3
     result.x[num_segments:2*num_segments] = (result.x[num_segments:2*num_segments] + np.pi) % (2 * np.pi) - np.pi
@@ -256,7 +274,7 @@ if __name__ == "__main__":
     pts_per_seg = np.array([10, 10, 10])
 
     # Solve IK
-    optimal_params = inverse_kinematics(target_pose, initial_guess, pts_per_seg)
+    optimal_params = inverse_kinematics(target_pose, initial_guess, pts_per_seg, z_flag=0)
     #print("Optimal IK Parameters:", optimal_params)
     num_segments = len(optimal_params) // 3
     kappa = np.array(optimal_params[:num_segments])
