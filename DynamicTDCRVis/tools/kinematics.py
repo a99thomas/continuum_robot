@@ -99,7 +99,9 @@ def robotindependentmapping(kappa: np.ndarray[float], phi: np.ndarray[float], el
     return g
 
 
-def inverse_kinematics(target_pose, initial_guess, pts_per_seg, kappa_limits = [[0,10], [0,20]], phi_limits = [[-4,4],[-4,4]], ell_limits = [[0.25, 0.392],[0.20,0.392]]):
+from scipy.optimize import minimize
+
+def inverse_kinematics(target_pose, initial_guess, pts_per_seg, kappa_limits = [[-10,10], [-10,10]], phi_limits = [[-4,4],[-4,4]], ell_limits = [[0.25, 1.0],[0.20,1.0]]):
     """
     Solves inverse kinematics (IK) for a continuum robot with joint limits.
     
@@ -131,22 +133,43 @@ def inverse_kinematics(target_pose, initial_guess, pts_per_seg, kappa_limits = [
         R_actual = R.from_matrix(T_actual[:3, :3])
         R_target = R.from_matrix(target_pose[:3, :3])
         ori_error = 1 - np.dot(R_actual.as_quat(), R_target.as_quat()) ** 2
-
-         
-        # # Calc spring penalty 
-        # phi_rest = np.zeros(num_segments)
-        # k_spring = np.array([10, 7])
-        # spring_penalty = np.sum(k_spring * ((phi - phi_rest)**2))
-
-        # # print(pos_error + 0.75 * ori_error)
+        # print(pos_error + 0.75 * ori_error)
         # print("ORI",ori_error)
-        # print("pos error: ", pos_error)
-        # print("spring penalty: ", spring_penalty)
+        # print(pos_error)
+        # 
         
-        return pos_error + 4 * ori_error
-        # return pos_error + 4 * ori_error + spring_penalty * 0.000001 #mult spring penalty to get it down to E-5 (OOM of position error once near/at optimal IK params)
-            # Why factor 0.000001?
-            #Shouldn't this be implemented in kinematics as well?
+        ## Calc spring penalty
+
+        cumulative_lengths = np.cumsum(ell) 
+        if num_segments >= 2:
+            seg1_length = cumulative_lengths[0]
+            seg2_length = cumulative_lengths[1] - cumulative_lengths[0]
+            print("seg 1: ", seg1_length, "seg 2: ", seg2_length)
+        else:
+            print("seg legnth: ", cumulative_lengths[-1])
+        
+        #Ratio penalty
+        baseline_ell = np.array([.392, .392])
+
+        d1 = ell[0] - baseline_ell[0]
+        d2 = ell[1] - baseline_ell[1]
+
+        violation = max(0, abs(d2) - 0.75 * abs(d1))
+        vio_penalty_coeff = 1e4
+        ratio_penalty = vio_penalty_coeff * (violation **2)
+
+        # kappa_rest = np.zeros(num_segments)
+        # k_spring = np.array([10, 1])
+        # spring_penalty = np.sum(k_spring * ((kappa - kappa_rest)**2))
+        # print("spring penalty: ", spring_penalty)
+
+        # print(pos_error + 0.75 * ori_error)
+        print("ORI",ori_error)
+        print("pos error: ", pos_error)
+        print("ratio penalty: ", ratio_penalty)
+        
+        #return pos_error + 4 * ori_error
+        return pos_error + 4 * ori_error + ratio_penalty #mult spring penalty to get it down to E-5 (OOM of position error once near/at optimal IK params)
 
 
     # Construct bounds for each parameter
