@@ -10,8 +10,8 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from matplotlib.animation import FuncAnimation
 from tools.joystick_command import Joystick
-from tools.kinematics import lengths_to_q, robotindependentmapping, q_to_lengths, inverse_kinematics
-from tools.plotting import setupfigure, plot_tf, update_plot, draw_tdcr
+from tools.raw_kinematics import lengths_to_q, robotindependentmapping, q_to_lengths, inverse_kinematics
+from tools.raw_plotting import setupfigure, plot_tf, update_plot, draw_tdcr
         
 
 current_path = Path(__file__).resolve().parent.parent
