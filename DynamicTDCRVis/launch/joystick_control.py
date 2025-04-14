@@ -8,7 +8,6 @@ import serial
 # Replace with the port you want: 
 # ser = serial.Serial('/dev/ttyUSB0', 115200)  # Adjust the port and baud rate as needed
 time.sleep(2)  # Give it time to connect
-
 # Add the parent directory to the system path
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
