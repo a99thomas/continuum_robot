@@ -6,16 +6,19 @@ from pathlib import Path
 from scipy.spatial.transform import Rotation as R
 import serial
 # Replace with the port you want: 
-# ser = serial.Serial('/dev/ttyUSB0', 115200)  # Adjust the port and baud rate as needed
+# ser = serial.Serial('/dev/cu.usbserial-0001', 115200)  # Adjust the port and baud rate as needed
 time.sleep(2)  # Give it time to connect
 # Add the parent directory to the system path
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from matplotlib.animation import FuncAnimation
 from tools.joystick_command import Joystick
-from tools.raw_kinematics import lengths_to_q, robotindependentmapping, q_to_lengths, inverse_kinematics
-from tools.raw_plotting import setupfigure, plot_tf, update_plot, draw_tdcr
-        
+from tools.kinematics_collision import lengths_to_q, robotindependentmapping, q_to_lengths, inverse_kinematics
+from tools.plotting import setupfigure, plot_tf, update_plot, draw_tdcr
+from tools.constants import object_pos, object_rad, object_height, path_height
+from tools.constants import kappa_init, phi_init, ell_init
+from tools.constants import phase_duration, total_phases
+
 
 current_path = Path(__file__).resolve().parent.parent
 print(f"Current script path: {current_path}")
@@ -36,28 +39,31 @@ def animate():
     # Define initial robot parameters
 
     joystick = Joystick()
-    radius = [0.0254, 0.0254]
-    kappa, phi, ell = np.array([1,1]), np.array([0, 0]), np.array([0.392, 0.392])
+    radius = [0.0254, 0.0254, 0.0254]
+    kappa, phi, ell = kappa_init, phi_init, ell_init
     g = robotindependentmapping(np.array(kappa), np.array(phi), np.array(ell), np.array([10]))
     g0 = g
     fig, ax = setupfigure(g0=g)
+    prev_lengths = None
+
 
     target_pose = np.eye(4)
     target_pose[:3, 3] = [0.1, 0.1, 0.7]
     target_pose[:3, :3] = R.from_euler('xyz', [0, 0, 0], degrees=True).as_matrix()  # Target orientation
     ax.scatter(target_pose[0, 3], target_pose[1, 3], target_pose[2,3], label="Trajectory")
 
-    
-    seg_end = np.array([11,22])  # Example segment indices
+    seg_end = np.array([11,22,33])  # Example segment indices
     clearance = 0.03
     curvelength = np.sum(np.linalg.norm(g[1:, 12:15] - g[:-1, 12:15], axis=1))
-    initial_guess = np.array([1.21463777, 0.95008398, 0.98696486, -1.04791395,  0.32951001, 0.3903954 ])
+    initial_guess = np.concatenate([kappa, phi, ell])
     optimal_params = initial_guess
     prev_time = time.time()
     
     def frame_update(frame):
         nonlocal initial_guess
         nonlocal prev_time
+        nonlocal prev_lengths
+
         # Update the plot
         ax.clear()
         
@@ -89,7 +95,7 @@ def animate():
         target_position = target_pose[:3, 3]
         
         # Perform inverse kinematics to find the optimal parameters
-        optimal_params = inverse_kinematics(target_pose, initial_guess, pts_per_seg=np.array([10, 10]))
+        optimal_params = inverse_kinematics(target_pose, initial_guess, pts_per_seg=np.array([10, 10, 10]))
 
         # Extract kappa, phi, ell from optimal_params
         num_segments = len(optimal_params) // 3
@@ -104,21 +110,31 @@ def animate():
         ### Send new lengths to robot ###
 
         # Convert to tendon lengths
-        lengths = q_to_lengths(kappa, phi, ell)
+        lengths = q_to_lengths(kappa, phi, ell, radius)
+        print("lengths: ", lengths)
 
         # Flatten to a 1D list
         flat_lengths = [l for segment in lengths for l in segment]
 
         # If this is the first frame, initialize prev_lengths
-        if 'prev_lengths' not in locals():
+        if prev_lengths is None:
             prev_lengths = flat_lengths
+            print("Initialized prev_lengths:", prev_lengths)
+            return  # Exit early — skip sending deltas this frame
 
         # Compute change in lengths for each motor
+        custom_motor_order = [2, 3, 8, 0, 5, 4, 1, 6, 7]
+
         delta_lengths = [new - old for new, old in zip(flat_lengths, prev_lengths)]
+        
+        # Reorder the delta_lengths to match the motor wiring
+        reordered_deltas = [delta_lengths[i] for i in custom_motor_order]
 
+        print("deltas: ", delta_lengths)
         # Convert delta length m to degrees & format for serial
-        motor_commands = ", ".join([f"{i} {(delta * 1000 / 25 * 360):.2f}" for i, delta in enumerate(delta_lengths)])
-
+       # Convert to degrees and generate motor command string
+        motor_commands = ", ".join([f"{motor} {(delta * 1000 / 25 * 360):.2f}" 
+                            for motor, delta in zip(range(9), reordered_deltas)])
         # Send to robot
         # ser.write((motor_commands + "\n").encode())
 

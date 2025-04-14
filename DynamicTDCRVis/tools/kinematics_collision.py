@@ -6,8 +6,6 @@ from tools.constants import object_pos, object_rad, object_height, path_height
 from tools.constants import kappa_init, phi_init, ell_init
 from tools.constants import pos_error_penalty, ori_error_penalty, z_error_penalty, collision_vio_penalty, path_error_penalty
 
-
-
 def lengths_to_q(type = "threesegtdcr", lengths = np.zeros((3,1)), radius = [0.0254, 0.0254, 0.0254]):
     """
     Convert lengths of each string to kappa, phi, and ell values
