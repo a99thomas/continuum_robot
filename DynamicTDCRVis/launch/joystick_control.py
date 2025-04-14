@@ -19,7 +19,6 @@ from tools.constants import object_pos, object_rad, object_height, path_height
 from tools.constants import kappa_init, phi_init, ell_init
 from tools.constants import phase_duration, total_phases
 
-
 current_path = Path(__file__).resolve().parent.parent
 print(f"Current script path: {current_path}")
 
