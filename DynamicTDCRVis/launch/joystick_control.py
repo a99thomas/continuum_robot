@@ -6,7 +6,9 @@ from pathlib import Path
 from scipy.spatial.transform import Rotation as R
 import serial
 # Replace with the port you want: 
-# ser = serial.Serial('/dev/cu.usbserial-0001', 115200)  # Adjust the port and baud rate as needed
+use_serial = 0
+if use_serial == 1:
+    ser = serial.Serial('/dev/cu.usbserial-0001', 115200)  # Adjust the port and baud rate as needed
 time.sleep(2)  # Give it time to connect
 # Add the parent directory to the system path
 sys.path.append(str(Path(__file__).resolve().parent.parent))
@@ -16,7 +18,7 @@ from tools.joystick_command import Joystick
 from tools.kinematics_collision import lengths_to_q, robotindependentmapping, q_to_lengths, inverse_kinematics
 from tools.plotting import setupfigure, plot_tf, update_plot, draw_tdcr
 from tools.constants import object_pos, object_rad, object_height, path_height
-from tools.constants import kappa_init, phi_init, ell_init
+from tools.constants import kappa_init, phi_init, ell_init, ell_limits_init
 from tools.constants import phase_duration, total_phases
 
 current_path = Path(__file__).resolve().parent.parent
@@ -40,18 +42,18 @@ def animate():
     joystick = Joystick()
     radius = [0.0254, 0.0254, 0.0254]
     kappa, phi, ell = kappa_init, phi_init, ell_init
-    g = robotindependentmapping(np.array(kappa), np.array(phi), np.array(ell), np.array([10]))
+    g = robotindependentmapping(np.array(kappa), np.array(phi), np.array(ell), np.array([3,3,3]))
     g0 = g
     fig, ax = setupfigure(g0=g)
     prev_lengths = None
 
 
     target_pose = np.eye(4)
-    target_pose[:3, 3] = [0.1, 0.1, 0.7]
-    target_pose[:3, :3] = R.from_euler('xyz', [0, 0, 0], degrees=True).as_matrix()  # Target orientation
+    target_pose[:3, 3] = [ell_init[0] + ell_init[1] + ell_init[2], 0.0, 0.0]
+    target_pose[:3, :3] = R.from_euler('xyz', [0, 91, 0], degrees=True).as_matrix()  # Target orientation
     ax.scatter(target_pose[0, 3], target_pose[1, 3], target_pose[2,3], label="Trajectory")
 
-    seg_end = np.array([11,22,33])  # Example segment indices
+    seg_end = np.array([4,8,12])  # Example segment indices
     clearance = 0.03
     curvelength = np.sum(np.linalg.norm(g[1:, 12:15] - g[:-1, 12:15], axis=1))
     initial_guess = np.concatenate([kappa, phi, ell])
@@ -78,7 +80,7 @@ def animate():
         # Target pose (update based on the controller commands)
         dt = time.time()-prev_time
         prev_time = time.time()
-        dt = dt/20
+        dt = dt/40
         target_pose[:3, 3] += [axes["L1"]*dt, axes["L2"]*dt, (buttons["Y"]-buttons["A"])*dt]  # Target position
         
         pitch_change = axes["R1"] * dt*300  # Pitch from right stick Y-axis
@@ -94,7 +96,7 @@ def animate():
         target_position = target_pose[:3, 3]
         
         # Perform inverse kinematics to find the optimal parameters
-        optimal_params = inverse_kinematics(target_pose, initial_guess, pts_per_seg=np.array([10, 10, 10]))
+        optimal_params = inverse_kinematics(target_pose, initial_guess, pts_per_seg=np.array([3, 3, 3]), ell_limits=ell_limits_init)
 
         # Extract kappa, phi, ell from optimal_params
         num_segments = len(optimal_params) // 3
@@ -123,25 +125,28 @@ def animate():
 
         # Compute change in lengths for each motor
         custom_motor_order = [2, 3, 8, 0, 5, 4, 1, 6, 7]
+        init_ell = np.repeat(ell_init,3)
 
-        delta_lengths = [new - old for new, old in zip(flat_lengths, prev_lengths)]
+        delta_lengths = np.round([old-new for new, old in zip(flat_lengths, init_ell)],4)
         
         # Reorder the delta_lengths to match the motor wiring
-        reordered_deltas = [delta_lengths[i] for i in custom_motor_order]
 
         print("deltas: ", delta_lengths)
         # Convert delta length m to degrees & format for serial
        # Convert to degrees and generate motor command string
-        motor_commands = ", ".join([f"{motor} {(delta * 1000 / 25 * 360):.2f}" 
-                            for motor, delta in zip(range(9), reordered_deltas)])
+        motor_commands = ", ".join([f"{motor} {(delta /  0.0125 * 180 / np.pi):.2f}" 
+                            for motor, delta in zip(custom_motor_order, delta_lengths)])
+        print(motor_commands)
+
         # Send to robot
-        # ser.write((motor_commands + "\n").encode())
+        if use_serial == 1:
+            ser.write((motor_commands + "\n").encode())
 
         # Update previous lengths for next frame
         prev_lengths = flat_lengths
         
         # Recalculate the robot configuration using updated kappa, phi, ell
-        g = robotindependentmapping(np.array(kappa), np.array(phi), np.array(ell), np.array([10]))
+        g = robotindependentmapping(np.array(kappa), np.array(phi), np.array(ell), pts_per_seg=np.array([3,3,3]))
         
         # Plot the updated robot configuration
         plot_elements = plot_tf(ax, g, seg_end, tipframe=True, segframe=False, baseframe=True, projections=True, baseplate=True)
@@ -150,7 +155,7 @@ def animate():
         plot_elements2 = draw_tdcr(ax,
             g, 
             seg_end, 
-            r_disk=2.5*1e-2, 
+            r_disk=1.5*1e-2, 
             r_height=1.5*1e-3, 
             tipframe=True, 
             segframe=False, 
@@ -161,7 +166,7 @@ def animate():
         
         # Plot the target position (no need for orientation here)
         ax.scatter(*target_position, color='red', s=100, label="Target Position")
-        ax.scatter(0.1, 0.1, 0.6, color="green", s=100)
+        # ax.scatter(0.1, 0.1, 0.6, color="green", s=100)
 
         # Redraw the plot for the new frame
         plt.draw()
