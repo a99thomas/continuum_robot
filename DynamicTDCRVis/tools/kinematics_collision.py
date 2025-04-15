@@ -70,10 +70,12 @@ def robotindependentmapping(kappa: np.ndarray[float], phi: np.ndarray[float], el
     g = np.zeros((np.sum(pts_per_seg+1), 16))  # Stores the transformation matrices of all the points in all the segments as rows
 
     p_count = 0  # Points counter
-    R_base = R.from_euler('y', 90, degrees=True).as_matrix() #rotate around y by -90
+    R_y = R.from_euler('y', 90, degrees=True).as_matrix() #rotate around y by -90
+    R_x = R.from_euler('x', 0, degrees=True).as_matrix() #rotate around y by -90
+    R_base = R_y @ R_x
     T_base = np.eye(4)  # base starts off as identity
     T_base[:3, :3] = R_base # apply rotation
-    T_base[:3, 3] = np.array([0, 0, 1])
+    T_base[:3, 3] = np.array([0, 0, 0])
     for i in range(numseg):
         c_p = np.cos(phi[i])
         s_p = np.sin(phi[i])

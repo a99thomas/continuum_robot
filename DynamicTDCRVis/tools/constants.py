@@ -9,9 +9,12 @@ object_height = 2.5                      # Cylinder height
 path_height = object_pos[2] + object_height / 2
 
 # --- Initial robot parameters ---
-kappa_init = np.array([1.0, 1.0, 1.0])
+kappa_init = np.array([0.0, 0.0, 0.0])
 phi_init = np.array([0.0, 0.0, 0.0])
-ell_init = np.array([0.392, 0.392, 0.392])
+ell_init = np.array([0.1, 0.15, 0.185])
+
+ell_limits_init = [[0.06, 0.12], [0.08, 0.17], [0.08, 0.2]]
+
 
 # --- Animation/trajectory settings ---
 phase_duration = 30
